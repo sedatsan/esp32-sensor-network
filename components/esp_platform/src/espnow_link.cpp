@@ -27,12 +27,19 @@ void onSent(const std::uint8_t* /*mac*/, esp_now_send_status_t status) {
 
 }  // namespace
 
-esp_err_t initRadio(std::uint8_t channel) {
+esp_err_t initNvs() {
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
+        if ((err = nvs_flash_erase()) != ESP_OK) {
+            return err;
+        }
         err = nvs_flash_init();
     }
+    return err;
+}
+
+esp_err_t initRadio(std::uint8_t channel) {
+    esp_err_t err = initNvs();
     if (err != ESP_OK) {
         return err;
     }

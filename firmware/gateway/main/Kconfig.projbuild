@@ -1,12 +1,23 @@
 menu "Gateway"
 
 config SN_ESPNOW_CHANNEL
-    int "ESP-NOW Wi-Fi channel"
+    int "Wi-Fi channel in setup mode"
     range 1 13
     default 1
+    help
+        Channel of the setup access point. Once the gateway joins a network
+        it uses the router's channel and nodes find it by scanning.
 
 config SN_PIN_STATUS_LED
     int "Status LED GPIO (DevKit V1 onboard LED)"
     default 2
+
+config SN_SETUP_AP_PASSWORD
+    string "Setup access point password (8+ characters)"
+    default "sensornet"
+
+config SN_MQTT_TOPIC_PREFIX
+    string "MQTT topic prefix"
+    default "sensornet"
 
 endmenu

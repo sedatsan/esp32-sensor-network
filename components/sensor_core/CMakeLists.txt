@@ -6,6 +6,8 @@ set(SENSOR_CORE_SRCS
     src/report.cpp
     src/node_controller.cpp
     src/gateway_tracker.cpp
+    src/telemetry.cpp
+    src/gateway_settings.cpp
 )
 
 if(ESP_PLATFORM)

@@ -36,6 +36,9 @@ if(SN_BUILD_TESTS)
         tests/test_report.cpp
         tests/test_node_controller.cpp
         tests/test_gateway_tracker.cpp
+        tests/test_telemetry.cpp
+        tests/test_gateway_settings.cpp
+        tests/test_long_press.cpp
     )
     target_link_libraries(sensor_core_tests PRIVATE sensor_core GTest::gtest_main)
     include(GoogleTest)

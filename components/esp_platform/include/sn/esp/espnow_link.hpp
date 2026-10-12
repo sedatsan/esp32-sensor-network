@@ -11,6 +11,9 @@ namespace sn::esp {
 
 using MacAddress = std::array<std::uint8_t, 6>;
 
+// Initialises the default NVS partition, erasing it if its layout is stale.
+esp_err_t initNvs();
+
 // Brings up Wi-Fi in station mode (radio only, no AP connection) on a fixed
 // channel, which is all ESP-NOW needs.
 esp_err_t initRadio(std::uint8_t channel);
