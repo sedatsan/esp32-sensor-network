@@ -6,6 +6,8 @@
 #include "esp_mac.h"
 #include "esp_sleep.h"
 #include "esp_wifi.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "sdkconfig.h"
 #include "sn/app/node_controller.hpp"
 #include "sn/drivers/hcsr04.hpp"
@@ -29,7 +31,12 @@ class NodeSensors final : public sn::app::ISensors {
 public:
     NodeSensors(sn::drivers::Pir& pir, sn::drivers::Hcsr04& ranger) : pir_(pir), ranger_(ranger) {}
 
-    bool motion() override { return pir_.motionDetected(); }
+    bool motion() override {
+        const bool detected = pir_.motionDetected();
+        ESP_LOGI(kTag, "motion %s%s", detected ? "yes" : "no",
+                 pir_.isReady() ? "" : " (PIR warming up)");
+        return detected;
+    }
 
     std::uint16_t distanceMm() override {
         const auto result = ranger_.measureMedianMm(kDistanceSamples);
@@ -37,6 +44,7 @@ public:
             ESP_LOGW(kTag, "distance failed: error %d", static_cast<int>(result.error()));
             return 0;
         }
+        ESP_LOGI(kTag, "distance %u mm", *result);
         return *result;
     }
 
@@ -57,7 +65,7 @@ sn::app::WakeCause wakeCause() {
     }
 }
 
-[[noreturn]] void enterDeepSleep(const sn::app::SleepPlan& plan) {
+[[noreturn, maybe_unused]] void enterDeepSleep(const sn::app::SleepPlan& plan) {
     esp_sleep_enable_timer_wakeup(static_cast<std::uint64_t>(plan.timerWakeS) * 1'000'000ULL);
     if (plan.wakeOnMotion) {
 #if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
@@ -77,6 +85,20 @@ std::uint32_t nodeIdFromMac() {
     ESP_ERROR_CHECK(esp_read_mac(mac, ESP_MAC_WIFI_STA));
     return (static_cast<std::uint32_t>(mac[2]) << 24) | (static_cast<std::uint32_t>(mac[3]) << 16) |
            (static_cast<std::uint32_t>(mac[4]) << 8) | mac[5];
+}
+
+sn::app::SleepPlan runAndLog(sn::app::NodeController& controller, sn::app::WakeCause cause) {
+    ESP_LOGI(kTag, "wake cause %d, seq %lu", static_cast<int>(cause),
+             static_cast<unsigned long>(gRetained.sequence));
+    const std::uint32_t failedBefore = gRetained.failedReports;
+    const auto plan = controller.runCycle(cause, gRetained);
+    if (gRetained.failedReports != failedBefore) {
+        ESP_LOGW(kTag, "report not acknowledged by gateway (%lu failed so far)",
+                 static_cast<unsigned long>(gRetained.failedReports));
+    } else {
+        ESP_LOGI(kTag, "report delivered");
+    }
+    return plan;
 }
 
 }  // namespace
@@ -112,15 +134,13 @@ extern "C" void app_main() {
     };
     sn::app::NodeController controller{sensors, transport, clock, config};
 
-    ESP_LOGI(kTag, "wake cause %d, seq %lu", static_cast<int>(cause),
-             static_cast<unsigned long>(gRetained.sequence));
-    const std::uint32_t failedBefore = gRetained.failedReports;
-    const auto plan = controller.runCycle(cause, gRetained);
-    if (gRetained.failedReports != failedBefore) {
-        ESP_LOGW(kTag, "report not acknowledged by gateway (%lu failed so far)",
-                 static_cast<unsigned long>(gRetained.failedReports));
-    } else {
-        ESP_LOGI(kTag, "report delivered");
+#if CONFIG_SN_DEBUG_STAY_AWAKE
+    // Bench mode: never sleep, so the USB console stays attached.
+    for (auto c = cause;; c = sn::app::WakeCause::Timer) {
+        (void)runAndLog(controller, c);
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_SN_DEBUG_PERIOD_MS));
     }
-    enterDeepSleep(plan);
+#else
+    enterDeepSleep(runAndLog(controller, cause));
+#endif
 }

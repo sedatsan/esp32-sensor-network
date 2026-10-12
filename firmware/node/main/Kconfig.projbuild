@@ -36,4 +36,15 @@ config SN_PIN_ECHO
     int "HC-SR04 ECHO GPIO (through a 5V to 3.3V divider)"
     default 5
 
+config SN_DEBUG_STAY_AWAKE
+    bool "Bench mode: stay awake and report periodically"
+    default n
+    help
+        Skips deep sleep so the USB console stays attached for debugging.
+
+config SN_DEBUG_PERIOD_MS
+    int "Bench mode report period (ms)"
+    depends on SN_DEBUG_STAY_AWAKE
+    default 3000
+
 endmenu
