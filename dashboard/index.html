@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SensorNet Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: instrument panel. Connection bar on top, one card per node with
+   a range strip, readings and a distance trace, raw message log below. */
+:root {
+  --bg: #eef2f1;
+  --panel: #fbfcfc;
+  --ink: #15211e;
+  --muted: #5a6964;
+  --line: #d3dcd9;
+  --accent: #0b7a6b;      /* sonar teal */
+  --accent-soft: #d5ece7;
+  --motion: #b86e00;      /* PIR amber */
+  --motion-soft: #f8e7cc;
+  --ok: #217a3c;
+  --bad: #b3261e;
+  --bad-soft: #f8dcd9;
+  --font-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1412; --panel: #141d1a; --ink: #e3ece9; --muted: #92a39d; --line: #26332f;
+    --accent: #3cc2ad; --accent-soft: #143a34; --motion: #f0a53a; --motion-soft: #3d2a0c;
+    --ok: #5fcf7e; --bad: #ff8a80; --bad-soft: #43201d; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1412; --panel: #141d1a; --ink: #e3ece9; --muted: #92a39d; --line: #26332f;
+  --accent: #3cc2ad; --accent-soft: #143a34; --motion: #f0a53a; --motion-soft: #3d2a0c;
+  --ok: #5fcf7e; --bad: #ff8a80; --bad-soft: #43201d; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 var(--font-body);
+}
+.wrap { max-width: 72rem; margin: 0 auto; padding-inline: 16px; padding-block: 20px 40px; display: grid; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; }
+h1 { font: 700 2rem/1 var(--font-display); letter-spacing: .01em; margin: 0; text-wrap: balance; }
+h1 span { color: var(--accent); }
+h2 { font: 600 1.1rem/1.2 var(--font-display); letter-spacing: .04em; text-transform: uppercase; margin: 0; color: var(--muted); }
+.sub { color: var(--muted); margin: 4px 0 0; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { font: 500 12px/1 var(--font-data); padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); display: inline-flex; gap: 6px; align-items: center; }
+.pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pill.live::before { background: var(--ok); }
+.pill.demo::before { background: var(--motion); }
+.pill.down::before { background: var(--bad); }
+
+form.conn { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); align-items: end; }
+form.conn label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); min-width: 0; }
+form.conn input[type=text], form.conn input[type=password], form.conn input[type=url] {
+  font: 14px var(--font-data); padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); width: 100%; min-width: 0;
+}
+form.conn .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.check { display: flex !important; flex-direction: row; align-items: center; gap: 6px; text-transform: none !important; letter-spacing: 0 !important; font-weight: 500 !important; }
+button { font: 600 14px var(--font-body); padding: 9px 16px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: var(--panel); cursor: pointer; }
+button.ghost { background: transparent; color: var(--accent); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.note { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 13px; }
+.err { grid-column: 1 / -1; margin: 0; padding: 8px 12px; border-radius: 6px; background: var(--bad-soft); color: var(--bad); font-size: 13px; }
+
+.nodes { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); }
+.empty { color: var(--muted); padding: 24px; border: 1px dashed var(--line); border-radius: var(--radius); text-align: center; }
+.node { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 14px; min-width: 0; }
+.node.stale { opacity: .6; }
+.node-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.node-id { font: 600 1.25rem/1 var(--font-display); letter-spacing: .03em; }
+.node-id small { font: 400 12px var(--font-data); color: var(--muted); margin-left: 6px; }
+.seen { font: 12px var(--font-data); color: var(--muted); }
+.reading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dist { font: 700 3rem/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.dist small { font: 500 1rem var(--font-display); color: var(--muted); margin-left: 4px; }
+.dist.invalid { color: var(--muted); }
+.chip { font: 600 12px/1 var(--font-data); padding: 6px 10px; border-radius: 999px; background: var(--line); color: var(--muted); letter-spacing: .03em; text-transform: uppercase; }
+.chip.on { background: var(--motion-soft); color: var(--motion); }
+
+.strip { position: relative; height: 26px; border-radius: 4px; background:
+  repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 25%), var(--accent-soft); }
+.strip .mark { position: absolute; top: -3px; bottom: -3px; width: 3px; border-radius: 2px; background: var(--accent); transform: translateX(-1px); transition: left .4s ease; }
+.strip-scale { display: flex; justify-content: space-between; font: 11px var(--font-data); color: var(--muted); margin-top: 3px; }
+
+canvas { width: 100%; height: 90px; display: block; }
+dl.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+dl.stats div { min-width: 0; }
+dt { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+dd { margin: 0; font: 500 14px var(--font-data); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+dd.warn { color: var(--bad); }
+
+.log { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; display: grid; gap: 8px; min-width: 0; }
+.log ol { list-style: none; margin: 0; padding: 0; font: 12px/1.6 var(--font-data); overflow-x: auto; max-height: 14rem; overflow-y: auto; }
+.log li { white-space: nowrap; color: var(--muted); }
+.log li b { color: var(--ink); font-weight: 500; }
+footer { color: var(--muted); font-size: 13px; }
+footer a { color: var(--accent); }
+@media (max-width: 420px) { dl.stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dist { font-size: 2.5rem; } }
+@media (prefers-reduced-motion: reduce) { .strip .mark { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Sensor<span>Net</span> Live</h1>
+      <p class="sub">ESP32-C3 nodes &rarr; ESP-NOW &rarr; ESP32 gateway &rarr; MQTT over TLS</p>
+    </div>
+    <div class="pills">
+      <span class="pill" id="brokerPill">Not connected</span>
+      <span class="pill" id="gatewayPill">Gateway unknown</span>
+    </div>
+  </header>
+
+  <form class="conn" id="connForm" autocomplete="on">
+    <label for="url">Broker WebSocket URL
+      <input id="url" type="url" required placeholder="wss://xxxx.s1.eu.hivemq.cloud:8884/mqtt">
+    </label>
+    <label for="user">Username
+      <input id="user" type="text" autocomplete="username">
+    </label>
+    <label for="pass">Password
+      <input id="pass" type="password" autocomplete="current-password">
+    </label>
+    <label for="prefix">Topic prefix
+      <input id="prefix" type="text" value="sensornet">
+    </label>
+    <div class="row">
+      <label class="check" for="remember"><input id="remember" type="checkbox"> Remember on this device</label>
+    </div>
+    <div class="row">
+      <button type="submit" id="connectBtn">Connect</button>
+      <button type="button" class="ghost" id="demoBtn">Show demo data</button>
+    </div>
+    <p class="err" id="error" hidden></p>
+    <p class="note">The browser talks to your broker directly; credentials stay in this browser. Use a broker user that may only read <code>sensornet/#</code>.</p>
+  </form>
+
+  <section class="nodes" id="nodes" aria-live="polite">
+    <div class="empty" id="empty">No reports yet. Connect to your broker, or press <b>Show demo data</b> to see how a node looks.</div>
+  </section>
+
+  <section class="log">
+    <h2>Messages</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <footer>Readings are HC-SR04 medians of 5 echoes (range 20&ndash;4000 mm) and HC-SR501 motion. Source: <a href="https://github.com/sedatsan/esp32-sensor-network" target="_blank" rel="noopener">sedatsan/esp32-sensor-network</a>.</footer>
+</div>
+
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+(() => {
+  const RANGE_MAX_MM = 4000;
+  const HISTORY = 60;
+  const STALE_MS = 11 * 60 * 1000;  // two missed 5-minute reports
+  const STORE_KEY = "sensornet.dashboard";
+
+  const $ = (id) => document.getElementById(id);
+  const nodes = new Map();  // id -> { el, history: [{t, mm, motion}], last }
+  let client = null;
+  let demoTimer = null;
+
+  // ---- persisted form (per browser only) ----
+  function loadForm() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+      if (!saved) return;
+      $("url").value = saved.url || "";
+      $("user").value = saved.user || "";
+      $("pass").value = saved.pass || "";
+      $("prefix").value = saved.prefix || "sensornet";
+      $("remember").checked = true;
+    } catch (_) { /* storage unavailable */ }
+  }
+  function saveForm() {
+    try {
+      if ($("remember").checked) {
+        localStorage.setItem(STORE_KEY, JSON.stringify({
+          url: $("url").value, user: $("user").value, pass: $("pass").value, prefix: $("prefix").value,
+        }));
+      } else {
+        localStorage.removeItem(STORE_KEY);
+      }
+    } catch (_) { /* storage unavailable */ }
+  }
+
+  function setPill(id, text, cls) {
+    const el = $(id);
+    el.textContent = text;
+    el.className = "pill" + (cls ? " " + cls : "");
+  }
+  function showError(msg) {
+    $("error").textContent = msg || "";
+    $("error").hidden = !msg;
+  }
+
+  // ---- node cards ----
+  function nodeCard(id) {
+    const el = document.createElement("article");
+    el.className = "node";
+    el.innerHTML = `
+      <div class="node-head">
+        <div class="node-id">Node ${id}<small data-k="gw"></small></div>
+        <div class="seen" data-k="seen"></div>
+      </div>
+      <div class="reading">
+        <div class="dist" data-k="dist">&ndash;<small>mm</small></div>
+        <span class="chip" data-k="motion">No motion</span>
+      </div>
+      <div>
+        <div class="strip" role="img" data-k="strip"><div class="mark" data-k="mark"></div></div>
+        <div class="strip-scale"><span>0</span><span>1 m</span><span>2 m</span><span>3 m</span><span>4 m</span></div>
+      </div>
+      <canvas data-k="chart" aria-label="Distance over the last ${HISTORY} reports"></canvas>
+      <dl class="stats">
+        <div><dt>Seq</dt><dd data-k="seq">&ndash;</dd></div>
+        <div><dt>RSSI</dt><dd data-k="rssi">&ndash;</dd></div>
+        <div><dt>Link</dt><dd data-k="link">&ndash;</dd></div>
+        <div><dt>Lost</dt><dd data-k="lost">&ndash;</dd></div>
+      </dl>`;
+    const q = (k) => el.querySelector(`[data-k="${k}"]`);
+    return { el, q, history: [], last: null, lastMotion: null };
+  }
+
+  function ago(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    if (s < 60) return `${s}s ago`;
+    const m = Math.round(s / 60);
+    return m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
+  }
+
+  function onReport(gateway, r, now = Date.now()) {
+    if (typeof r !== "object" || r === null || typeof r.node !== "string") return;
+    let n = nodes.get(r.node);
+    if (!n) {
+      n = nodeCard(r.node);
+      nodes.set(r.node, n);
+      $("empty").hidden = true;
+      $("nodes").appendChild(n.el);
+    }
+    n.last = now;
+    if (r.motion) n.lastMotion = now;
+    n.history.push({ t: now, mm: r.distance_valid ? r.distance_mm : null, motion: !!r.motion });
+    if (n.history.length > HISTORY) n.history.shift();
+
+    n.q("gw").textContent = gateway ? `via ${gateway}` : "";
+    const dist = n.q("dist");
+    if (r.distance_valid) {
+      dist.innerHTML = `${r.distance_mm}<small>mm</small>`;
+      dist.classList.remove("invalid");
+      const pct = Math.min(100, (r.distance_mm / RANGE_MAX_MM) * 100);
+      n.q("mark").style.left = pct + "%";
+      n.q("mark").hidden = false;
+      n.q("strip").setAttribute("aria-label", `${r.distance_mm} mm of 4000 mm range`);
+    } else {
+      dist.innerHTML = `no echo<small></small>`;
+      dist.classList.add("invalid");
+      n.q("mark").hidden = true;
+    }
+    const chip = n.q("motion");
+    chip.textContent = r.motion ? "Motion" : "No motion";
+    chip.classList.toggle("on", !!r.motion);
+    n.q("seq").textContent = r.seq;
+    n.q("rssi").textContent = `${r.rssi} dBm`;
+    n.q("link").textContent = r.link + (r.cold_boot ? " · boot" : "");
+    n.q("lost").textContent = r.lost;
+    n.q("lost").classList.toggle("warn", r.lost > 0);
+    drawChart(n);
+    refreshAges();
+  }
+
+  function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function drawChart(n) {
+    const canvas = n.q("chart");
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    const ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
+
+    const pts = n.history;
+    const valid = pts.filter((p) => p.mm !== null).map((p) => p.mm);
+    const padTop = 14, padBottom = 10, labelW = 44;
+    const plotW = w - labelW, plotH = h - padTop - padBottom;
+    let lo = valid.length ? Math.min(...valid) : 0;
+    let hi = valid.length ? Math.max(...valid) : 100;
+    const span = Math.max(50, hi - lo);
+    lo = Math.max(0, Math.floor((lo - span * 0.2) / 10) * 10);
+    hi = Math.ceil((hi + span * 0.2) / 10) * 10;
+    const x = (i) => labelW + (pts.length <= 1 ? plotW : (i / (HISTORY - 1)) * plotW);
+    const y = (mm) => padTop + (1 - (mm - lo) / (hi - lo)) * plotH;
+
+    ctx.font = `11px ${cssVar("--font-data")}`;
+    ctx.fillStyle = cssVar("--muted");
+    ctx.strokeStyle = cssVar("--line");
+    ctx.lineWidth = 1;
+    for (const v of [lo, hi]) {
+      ctx.beginPath(); ctx.moveTo(labelW, y(v)); ctx.lineTo(w, y(v)); ctx.stroke();
+      ctx.fillText(`${v}`, 0, y(v) + 4);
+    }
+
+    // motion ticks along the bottom
+    ctx.fillStyle = cssVar("--motion");
+    pts.forEach((p, i) => { if (p.motion) ctx.fillRect(x(i) - 1.5, h - 6, 3, 6); });
+
+    const accent = cssVar("--accent");
+    const line = pts.map((p, i) => (p.mm === null ? null : [x(i), y(p.mm)]));
+    const segs = [];
+    let cur = [];
+    for (const p of line) { if (p) cur.push(p); else if (cur.length) { segs.push(cur); cur = []; } }
+    if (cur.length) segs.push(cur);
+    for (const s of segs) {
+      ctx.beginPath();
+      s.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+      ctx.lineTo(s[s.length - 1][0], padTop + plotH);
+      ctx.lineTo(s[0][0], padTop + plotH);
+      ctx.closePath();
+      ctx.globalAlpha = 0.15; ctx.fillStyle = accent; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.beginPath();
+      s.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+      ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.stroke();
+    }
+    const end = line[line.length - 1];
+    if (end) { ctx.beginPath(); ctx.arc(end[0], end[1], 3.5, 0, Math.PI * 2); ctx.fillStyle = accent; ctx.fill(); }
+  }
+
+  function refreshAges() {
+    const now = Date.now();
+    for (const n of nodes.values()) {
+      if (!n.last) continue;
+      const motion = n.lastMotion ? ` · motion ${ago(now - n.lastMotion)}` : "";
+      n.q("seen").textContent = `seen ${ago(now - n.last)}${motion}`;
+      n.el.classList.toggle("stale", now - n.last > STALE_MS);
+    }
+  }
+  setInterval(refreshAges, 5000);
+  window.addEventListener("resize", () => nodes.forEach(drawChart));
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => nodes.forEach(drawChart));
+
+  function log(topic, text) {
+    const li = document.createElement("li");
+    const t = new Date().toLocaleTimeString();
+    li.innerHTML = `${t} <b></b> `;
+    li.querySelector("b").textContent = topic;
+    li.append(text);
+    $("log").prepend(li);
+    while ($("log").children.length > 40) $("log").lastChild.remove();
+  }
+
+  // ---- MQTT ----
+  function handleMessage(prefix, topic, payload) {
+    const text = payload.toString();
+    log(topic, text);
+    const parts = topic.split("/");
+    if (parts.length === 3 && parts[0] === prefix && parts[2] === "status") {
+      setPill("gatewayPill", `Gateway ${parts[1]} ${text}`, text === "online" ? "live" : "down");
+    } else if (parts.length === 4 && parts[0] === prefix && parts[2] === "node") {
+      try { onReport(parts[1], JSON.parse(text)); } catch (_) { /* not JSON */ }
+    }
+  }
+
+  function clearNodes() {
+    nodes.forEach((n) => n.el.remove());
+    nodes.clear();
+    $("log").replaceChildren();
+    $("empty").hidden = false;
+  }
+
+  function connect() {
+    stopDemo();
+    clearNodes();
+    showError("");
+    if (typeof mqtt === "undefined") {
+      showError("The MQTT library did not load. Check your connection and reload the page.");
+      return;
+    }
+    if (client) client.end(true);
+    const prefix = $("prefix").value.trim() || "sensornet";
+    setPill("brokerPill", "Connecting…", "");
+    try {
+      client = mqtt.connect($("url").value.trim(), {
+        username: $("user").value || undefined,
+        password: $("pass").value || undefined,
+        clientId: "sn-dash-" + Math.random().toString(16).slice(2, 10),
+        reconnectPeriod: 5000,
+        connectTimeout: 10000,
+      });
+    } catch (e) {
+      setPill("brokerPill", "Not connected", "down");
+      showError("That broker URL is not valid. It should start with wss:// and end in /mqtt.");
+      return;
+    }
+    client.on("connect", () => {
+      setPill("brokerPill", "Broker live", "live");
+      client.subscribe([`${prefix}/+/status`, `${prefix}/+/node/+`], { qos: 1 });
+    });
+    client.on("reconnect", () => setPill("brokerPill", "Reconnecting…", "down"));
+    client.on("close", () => setPill("brokerPill", "Disconnected", "down"));
+    client.on("error", (e) => {
+      const msg = String(e && e.message || e);
+      showError(/auth|Not authorized|Bad user/i.test(msg)
+        ? "The broker rejected the username or password."
+        : `Could not reach the broker: ${msg}`);
+    });
+    client.on("message", (topic, payload) => handleMessage(prefix, topic, payload));
+  }
+
+  $("connForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    saveForm();
+    connect();
+  });
+
+  // ---- demo mode: a node on a desk, someone walks past now and then ----
+  function startDemo() {
+    if (client) { client.end(true); client = null; }
+    stopDemo();
+    clearNodes();
+    showError("");
+    setPill("brokerPill", "Demo data", "demo");
+    setPill("gatewayPill", "Gateway 0e3e84 (demo)", "demo");
+    let seq = 0, mm = 168, walker = 0;
+    const tick = () => {
+      walker = walker > 0 ? walker - 1 : (Math.random() < 0.08 ? 4 : 0);
+      const target = walker > 0 ? 620 + Math.random() * 400 : 168;
+      mm = Math.round(mm + (target - mm) * 0.6 + (Math.random() - 0.5) * 6);
+      const r = { node: "d51eb380", seq: seq++, distance_mm: mm, distance_valid: true,
+        motion: walker > 0, cold_boot: seq === 1, battery_mv: 0,
+        rssi: -66 - Math.round(Math.random() * 6), link: seq === 1 ? "new" : "ok", lost: 0 };
+      log("sensornet/f90e3e84/node/d51eb380", JSON.stringify(r));
+      onReport("f90e3e84 (demo)", r);
+    };
+    for (let i = 0; i < 30; i++) tick();
+    demoTimer = setInterval(tick, 2500);
+  }
+  function stopDemo() { if (demoTimer) clearInterval(demoTimer); demoTimer = null; }
+  $("demoBtn").addEventListener("click", startDemo);
+
+  loadForm();
+  if ($("remember").checked && $("url").value) connect(); else startDemo();
+})();
+</script>
+</body>
+</html>
