@@ -5,6 +5,7 @@
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_sleep.h"
+#include "esp_wifi.h"
 #include "sdkconfig.h"
 #include "sn/app/node_controller.hpp"
 #include "sn/drivers/hcsr04.hpp"
@@ -101,6 +102,7 @@ extern "C" void app_main() {
         gateway.fill(0xFF);
     }
     ESP_ERROR_CHECK(sn::esp::initRadio(CONFIG_SN_ESPNOW_CHANNEL));
+    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(CONFIG_SN_MAX_TX_POWER_QDBM));
     sn::esp::EspNowTransport transport;
     ESP_ERROR_CHECK(transport.begin(gateway, CONFIG_SN_ESPNOW_CHANNEL));
 
@@ -112,6 +114,13 @@ extern "C" void app_main() {
 
     ESP_LOGI(kTag, "wake cause %d, seq %lu", static_cast<int>(cause),
              static_cast<unsigned long>(gRetained.sequence));
+    const std::uint32_t failedBefore = gRetained.failedReports;
     const auto plan = controller.runCycle(cause, gRetained);
+    if (gRetained.failedReports != failedBefore) {
+        ESP_LOGW(kTag, "report not acknowledged by gateway (%lu failed so far)",
+                 static_cast<unsigned long>(gRetained.failedReports));
+    } else {
+        ESP_LOGI(kTag, "report delivered");
+    }
     enterDeepSleep(plan);
 }

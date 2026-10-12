@@ -12,6 +12,14 @@ config SN_ESPNOW_CHANNEL
     range 1 13
     default 1
 
+config SN_MAX_TX_POWER_QDBM
+    int "Max Wi-Fi TX power in 0.25 dBm units"
+    range 8 84
+    default 34
+    help
+        Many ESP32-C3 Super Mini boards have a poorly matched antenna and
+        fail to transmit at full power. 34 (8.5 dBm) is plenty for a room.
+
 config SN_REPORT_INTERVAL_S
     int "Report interval in seconds"
     default 300
