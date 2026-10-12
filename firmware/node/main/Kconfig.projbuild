@@ -1,0 +1,31 @@
+menu "Sensor node"
+
+config SN_GATEWAY_MAC
+    string "Gateway MAC address"
+    default "FF:FF:FF:FF:FF:FF"
+    help
+        Station MAC of the gateway, printed by the gateway at boot.
+        The broadcast default works but gets no delivery ACK.
+
+config SN_ESPNOW_CHANNEL
+    int "ESP-NOW Wi-Fi channel"
+    range 1 13
+    default 1
+
+config SN_REPORT_INTERVAL_S
+    int "Report interval in seconds"
+    default 300
+
+config SN_PIN_PIR
+    int "PIR output GPIO (must be deep-sleep wake capable, GPIO0-5 on C3)"
+    default 3
+
+config SN_PIN_TRIG
+    int "HC-SR04 TRIG GPIO"
+    default 4
+
+config SN_PIN_ECHO
+    int "HC-SR04 ECHO GPIO (through a 5V to 3.3V divider)"
+    default 5
+
+endmenu

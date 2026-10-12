@@ -1,0 +1,18 @@
+Checks: >
+  bugprone-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-avoid-const-or-ref-data-members,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -bugprone-easily-swappable-parameters,
+  -clang-analyzer-optin.core.EnumCastOutOfRange
+CheckOptions:
+  cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor: true
+HeaderFilterRegex: 'components/sensor_core/include/.*'

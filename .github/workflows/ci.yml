@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  host-tests:
+    name: Host unit tests (ASan + UBSan)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+      - run: cmake --build build
+      - run: ctest --test-dir build --output-on-failure
+
+  static-analysis:
+    name: clang-tidy, cppcheck, clang-format
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build clang-tidy cppcheck clang-format
+      - name: clang-format
+        run: |
+          find components tests firmware -name '*.cpp' -o -name '*.hpp' \
+            | xargs clang-format --dry-run --Werror
+      - name: clang-tidy
+        run: |
+          cmake -S . -B build -G Ninja -DSN_SANITIZE=OFF
+          cmake --build build --target sensor_core
+          clang-tidy -p build --warnings-as-errors='*' components/sensor_core/src/*.cpp
+      - name: cppcheck
+        run: |
+          cppcheck --enable=warning,style,performance,portability --error-exitcode=1 \
+            --inline-suppr --std=c++20 -I components/sensor_core/include \
+            components/sensor_core/src
+
+  firmware:
+    name: Firmware (${{ matrix.app }})
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - app: node
+            target: esp32c3
+          - app: gateway
+            target: esp32
+    steps:
+      - uses: actions/checkout@v4
+      - uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3.2
+          target: ${{ matrix.target }}
+          path: firmware/${{ matrix.app }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.app }}
+          path: firmware/${{ matrix.app }}/build/*.bin

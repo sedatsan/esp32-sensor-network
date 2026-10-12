@@ -1,0 +1,12 @@
+menu "Gateway"
+
+config SN_ESPNOW_CHANNEL
+    int "ESP-NOW Wi-Fi channel"
+    range 1 13
+    default 1
+
+config SN_PIN_STATUS_LED
+    int "Status LED GPIO (DevKit V1 onboard LED)"
+    default 2
+
+endmenu
