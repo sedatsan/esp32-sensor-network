@@ -64,8 +64,12 @@ void onMqttEvent(void* /*arg*/, esp_event_base_t /*base*/, std::int32_t id, void
             break;
         case MQTT_EVENT_ERROR:
             if (event->error_handle->error_type == MQTT_ERROR_TYPE_CONNECTION_REFUSED) {
-                ESP_LOGE(kTag, "broker refused the connection (code %d): check username/password",
-                         static_cast<int>(event->error_handle->connect_return_code));
+                ESP_LOGE(kTag,
+                         "broker refused the connection (code %d) for user \"%s\" with a %u-char "
+                         "password: check both (case-sensitive); hold BOOT 3 s to re-enter them",
+                         static_cast<int>(event->error_handle->connect_return_code),
+                         gSettings.brokerUser.c_str(),
+                         static_cast<unsigned>(gSettings.brokerPassword.size()));
             } else if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
                 ESP_LOGE(kTag, "transport error: tls 0x%x, stack 0x%x, socket errno %d",
                          event->error_handle->esp_tls_last_esp_err,

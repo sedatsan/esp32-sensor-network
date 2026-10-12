@@ -30,11 +30,11 @@ padding:.6rem 1.2rem;font:inherit}.err{background:#fde8e8;padding:.75rem;border-
 small{color:#5b6475}</style></head><body><h1>SensorNet gateway</h1>)";
 
 constexpr const char* kForm = R"(<form method="post" action="/save">
-<label>Wi-Fi network<input name="ssid" maxlength="32" required></label>
-<label>Wi-Fi password<input name="wifi_pass" type="password" maxlength="63"></label>
-<label>Broker address<input name="broker_uri" maxlength="127" placeholder="mqtts://xxxx.hivemq.cloud:8883" required></label>
-<label>Broker username<input name="broker_user" maxlength="64"></label>
-<label>Broker password<input name="broker_pass" type="password" maxlength="64"></label>
+<label>Wi-Fi network<input name="ssid" maxlength="32" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
+<label>Wi-Fi password<input name="wifi_pass" type="password" maxlength="63" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
+<label>Broker address<input name="broker_uri" maxlength="127" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="mqtts://xxxx.hivemq.cloud:8883" required></label>
+<label>Broker username<input name="broker_user" maxlength="64" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
+<label>Broker password<input name="broker_pass" type="password" maxlength="64" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
 <button type="submit">Save and restart</button></form>
 <p><small>Settings are stored on this gateway only. Hold BOOT for 3 seconds to come back here.</small></p>
 </body></html>)";
@@ -97,8 +97,11 @@ esp_err_t handleSave(httpd_req_t* req) {
         httpd_resp_set_status(req, "500 Internal Server Error");
         return sendPage(req, "Could not store the settings. Please try again.");
     }
-    ESP_LOGI(kTag, "settings saved for network \"%s\", broker %s; restarting",
-             settings->wifiSsid.c_str(), settings->brokerUri.c_str());
+    ESP_LOGI(kTag,
+             "settings saved for network \"%s\", broker %s, user \"%s\" (password %u chars); "
+             "restarting",
+             settings->wifiSsid.c_str(), settings->brokerUri.c_str(), settings->brokerUser.c_str(),
+             static_cast<unsigned>(settings->brokerPassword.size()));
     httpd_resp_set_type(req, "text/html");
     httpd_resp_sendstr_chunk(req, kPageHead);
     httpd_resp_sendstr_chunk(req,
