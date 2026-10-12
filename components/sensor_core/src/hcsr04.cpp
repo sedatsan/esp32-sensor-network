@@ -21,10 +21,9 @@ Hcsr04::Hcsr04(hal::IOutputPin& trig, hal::IInputPin& echo, hal::IClock& clock,
 }
 
 bool Hcsr04::waitForEcho(bool level, std::uint32_t timeoutUs, std::uint64_t& timestampUs) {
-    const std::uint64_t start = clock_.nowUs();
+    const std::uint64_t deadlineUs = clock_.nowUs() + timeoutUs;
     while (echo_.read() != level) {
-        // cppcheck-suppress unsignedLessThanZero ; false positive on uint64 difference
-        if (clock_.nowUs() - start > timeoutUs) {
+        if (clock_.nowUs() > deadlineUs) {
             return false;
         }
     }

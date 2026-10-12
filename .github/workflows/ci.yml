@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build libgtest-dev
       - run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
       - run: cmake --build build
       - run: ctest --test-dir build --output-on-failure
