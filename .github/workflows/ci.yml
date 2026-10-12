@@ -10,7 +10,7 @@ jobs:
     name: Host unit tests (ASan + UBSan)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: sudo apt-get update && sudo apt-get install -y ninja-build
       - run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
       - run: cmake --build build
@@ -20,7 +20,7 @@ jobs:
     name: clang-tidy, cppcheck, clang-format
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: sudo apt-get update && sudo apt-get install -y ninja-build clang-tidy cppcheck clang-format
       - name: clang-format
         run: |
@@ -28,7 +28,7 @@ jobs:
             | xargs clang-format --dry-run --Werror
       - name: clang-tidy
         run: |
-          cmake -S . -B build -G Ninja -DSN_SANITIZE=OFF
+          cmake -S . -B build -G Ninja -DSN_SANITIZE=OFF -DSN_BUILD_TESTS=OFF
           cmake --build build --target sensor_core
           clang-tidy -p build --warnings-as-errors='*' components/sensor_core/src/*.cpp
       - name: cppcheck
@@ -48,13 +48,13 @@ jobs:
           - app: gateway
             target: esp32
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3.2
           target: ${{ matrix.target }}
           path: firmware/${{ matrix.app }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: firmware-${{ matrix.app }}
           path: firmware/${{ matrix.app }}/build/*.bin
