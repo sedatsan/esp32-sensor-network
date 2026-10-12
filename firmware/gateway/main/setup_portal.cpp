@@ -136,6 +136,7 @@ esp_err_t startSetupPortal(std::uint8_t channel, std::uint32_t gatewayId) {
 
     httpd_handle_t server = nullptr;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.stack_size = 6144;  // the save handler keeps the form body on its stack
     if ((err = httpd_start(&server, &config)) != ESP_OK) {
         return err;
     }
