@@ -22,7 +22,7 @@ constexpr auto kPinPir = static_cast<gpio_num_t>(CONFIG_SN_PIN_PIR);
 constexpr auto kPinTrig = static_cast<gpio_num_t>(CONFIG_SN_PIN_TRIG);
 constexpr auto kPinEcho = static_cast<gpio_num_t>(CONFIG_SN_PIN_ECHO);
 constexpr std::size_t kDistanceSamples = 5;
-constexpr std::uint32_t kRangerPowerUpMs = 100;
+constexpr std::uint32_t kRangerPowerUpMs = 250;
 
 // Survives deep sleep; cleared on power loss, which the gateway sees as a
 // ColdBoot report.
@@ -92,7 +92,11 @@ sn::app::SleepPlan runAndLog(sn::app::NodeController& controller, sn::app::WakeC
     ESP_LOGI(kTag, "wake cause %d, seq %lu", static_cast<int>(cause),
              static_cast<unsigned long>(gRetained.sequence));
     const std::uint32_t failedBefore = gRetained.failedReports;
+    const std::uint8_t channelBefore = gRetained.channel;
     const auto plan = controller.runCycle(cause, gRetained);
+    if (gRetained.channel != channelBefore) {
+        ESP_LOGI(kTag, "gateway found on channel %u", gRetained.channel);
+    }
     if (gRetained.failedReports != failedBefore) {
         ESP_LOGW(kTag, "report not acknowledged by gateway (%lu failed so far)",
                  static_cast<unsigned long>(gRetained.failedReports));
@@ -127,14 +131,19 @@ extern "C" void app_main() {
         ESP_LOGE(kTag, "invalid CONFIG_SN_GATEWAY_MAC");
         gateway.fill(0xFF);
     }
-    ESP_ERROR_CHECK(sn::esp::initRadio(CONFIG_SN_ESPNOW_CHANNEL));
+    // Start on the channel the gateway was last found on; the controller
+    // scans the others if it has moved (the gateway follows its router).
+    const std::uint8_t startChannel =
+        gRetained.channel != 0 ? gRetained.channel : CONFIG_SN_ESPNOW_CHANNEL;
+    ESP_ERROR_CHECK(sn::esp::initRadio(startChannel));
     ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(CONFIG_SN_MAX_TX_POWER_QDBM));
     sn::esp::EspNowTransport transport;
-    ESP_ERROR_CHECK(transport.begin(gateway, CONFIG_SN_ESPNOW_CHANNEL));
+    ESP_ERROR_CHECK(transport.begin(gateway));
 
     const sn::app::NodeConfig config{
         .nodeId = nodeIdFromMac(),
         .reportIntervalS = CONFIG_SN_REPORT_INTERVAL_S,
+        .defaultChannel = CONFIG_SN_ESPNOW_CHANNEL,
     };
     sn::app::NodeController controller{sensors, transport, clock, config};
 

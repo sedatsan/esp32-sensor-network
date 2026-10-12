@@ -25,6 +25,9 @@ public:
     virtual ~ITransport() = default;
     // Returns true once the link layer confirmed delivery.
     [[nodiscard]] virtual bool send(std::span<const std::uint8_t> payload) = 0;
+    // Moves the radio to another Wi-Fi channel. The gateway follows its
+    // router's channel, so nodes have to find it.
+    virtual void setChannel(std::uint8_t channel) = 0;
 };
 
 class IClockDelay {
@@ -39,12 +42,15 @@ struct NodeConfig {
     std::uint8_t maxSendAttempts = 3;
     std::uint32_t retryBaseDelayMs = 20;  // doubled on each retry
     std::uint32_t pirWarmupS = 60;        // HC-SR501 output is unreliable until then
+    std::uint8_t defaultChannel = 1;
+    std::uint8_t maxChannel = 13;  // 11 in the US/Canada
 };
 
 // State that must survive deep sleep (kept in RTC memory on target).
 struct RetainedState {
     std::uint32_t sequence = 0;
     std::uint32_t failedReports = 0;
+    std::uint8_t channel = 0;  // last channel the gateway answered on, 0 = unknown
 };
 
 struct SleepPlan {
@@ -63,6 +69,7 @@ public:
 
 private:
     bool sendWithRetry(std::span<const std::uint8_t> payload);
+    bool scanForGateway(std::span<const std::uint8_t> payload, RetainedState& state);
 
     ISensors& sensors_;
     ITransport& transport_;

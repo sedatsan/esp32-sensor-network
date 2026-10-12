@@ -19,17 +19,27 @@ struct StubSensors : ISensors {
     std::uint16_t distanceValue = 1500;
 };
 
+// Delivers only on the gateway's channel, optionally failing a few times.
 struct ScriptedTransport : ITransport {
     bool send(std::span<const std::uint8_t> payload) override {
         sent.emplace_back(payload.begin(), payload.end());
+        sentOn.push_back(channel);
+        if (channel != gatewayChannel) {
+            return false;
+        }
         const bool ok = failuresLeft == 0;
         if (!ok) {
             --failuresLeft;
         }
         return ok;
     }
+    void setChannel(std::uint8_t ch) override { channel = ch; }
+
     std::vector<std::vector<std::uint8_t>> sent;
+    std::vector<std::uint8_t> sentOn;
     int failuresLeft = 0;
+    std::uint8_t channel = 0;
+    std::uint8_t gatewayChannel = 1;
 };
 
 struct RecordingDelay : IClockDelay {
@@ -92,9 +102,10 @@ TEST_F(NodeControllerTest, RetriesWithExponentialBackoff) {
 }
 
 TEST_F(NodeControllerTest, CountsReportThatNeverGotThrough) {
-    transport.failuresLeft = 10;
+    transport.gatewayChannel = 0;  // gateway is off
     (void)controller.runCycle(WakeCause::Timer, state);
-    EXPECT_EQ(transport.sent.size(), 3U);
+    EXPECT_EQ(transport.sent.size(), 3U + 12U);  // retries, then one per other channel
+    EXPECT_EQ(state.channel, 1U);                // keeps the last known channel
     EXPECT_EQ(state.failedReports, 1U);
     EXPECT_EQ(state.sequence, 1U);  // sequence still advances so gaps are visible
 }
@@ -105,4 +116,25 @@ TEST_F(NodeControllerTest, ColdBootSleepsShortlyWithoutMotionWake) {
     const auto plan = slow.runCycle(WakeCause::ColdBoot, state);
     EXPECT_EQ(plan.timerWakeS, 60U);
     EXPECT_FALSE(plan.wakeOnMotion);
+}
+
+TEST_F(NodeControllerTest, FindsGatewayOnAnotherChannelAndRemembersIt) {
+    transport.gatewayChannel = 6;
+    (void)controller.runCycle(WakeCause::Timer, state);
+    EXPECT_EQ(state.channel, 6U);
+    EXPECT_EQ(state.failedReports, 0U);
+    EXPECT_EQ(transport.sentOn.back(), 6U);
+
+    transport.sent.clear();
+    transport.sentOn.clear();
+    (void)controller.runCycle(WakeCause::Timer, state);
+    EXPECT_EQ(transport.sentOn, (std::vector<std::uint8_t>{6}));  // no scan next time
+}
+
+TEST_F(NodeControllerTest, RescansWhenGatewayMoves) {
+    state.channel = 6;
+    transport.gatewayChannel = 11;
+    (void)controller.runCycle(WakeCause::Timer, state);
+    EXPECT_EQ(state.channel, 11U);
+    EXPECT_EQ(state.failedReports, 0U);
 }

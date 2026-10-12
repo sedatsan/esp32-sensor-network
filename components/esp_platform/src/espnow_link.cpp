@@ -70,7 +70,7 @@ bool parseMac(const char* text, MacAddress& out) {
     return true;
 }
 
-esp_err_t EspNowTransport::begin(const MacAddress& peer, std::uint8_t channel) {
+esp_err_t EspNowTransport::begin(const MacAddress& peer) {
     gPeer = peer;
     gSendDone = xSemaphoreCreateBinary();
     if (gSendDone == nullptr) {
@@ -82,7 +82,7 @@ esp_err_t EspNowTransport::begin(const MacAddress& peer, std::uint8_t channel) {
     }
     esp_now_peer_info_t info{};
     std::memcpy(info.peer_addr, peer.data(), peer.size());
-    info.channel = channel;
+    info.channel = 0;  // 0 = use the radio's current channel
     info.ifidx = WIFI_IF_STA;
     info.encrypt = false;  // TODO(milestone 6): enable LMK encryption
     return esp_now_add_peer(&info);
@@ -94,6 +94,15 @@ bool EspNowTransport::send(std::span<const std::uint8_t> payload) {
         return false;
     }
     return xSemaphoreTake(gSendDone, kAckTimeout) == pdTRUE && gLastSendOk;
+}
+
+void EspNowTransport::setChannel(std::uint8_t channel) {
+    std::uint8_t current = 0;
+    wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
+    if (esp_wifi_get_channel(&current, &second) == ESP_OK && current == channel) {
+        return;
+    }
+    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE));
 }
 
 }  // namespace sn::esp

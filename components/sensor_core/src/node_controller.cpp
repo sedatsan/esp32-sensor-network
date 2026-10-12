@@ -24,8 +24,13 @@ SleepPlan NodeController::runCycle(WakeCause cause, RetainedState& state) {
                    flagIf(distance != 0, protocol::ReportFlags::DistanceValid) |
                    flagIf(cause == WakeCause::ColdBoot, protocol::ReportFlags::ColdBoot);
 
+    if (state.channel == 0) {
+        state.channel = config_.defaultChannel;
+    }
+    transport_.setChannel(state.channel);
+
     const auto payload = protocol::encode(report);
-    if (!sendWithRetry(payload)) {
+    if (!sendWithRetry(payload) && !scanForGateway(payload, state)) {
         ++state.failedReports;
     }
 
@@ -38,6 +43,22 @@ SleepPlan NodeController::runCycle(WakeCause cause, RetainedState& state) {
     // If the PIR output is still high, a level-triggered wake would fire
     // immediately; rely on the timer until motion has ended.
     return SleepPlan{config_.reportIntervalS, !motion};
+}
+
+bool NodeController::scanForGateway(std::span<const std::uint8_t> payload, RetainedState& state) {
+    // One attempt per channel keeps a full sweep short; the next wake retries.
+    for (std::uint8_t channel = 1; channel <= config_.maxChannel; ++channel) {
+        if (channel == state.channel) {
+            continue;
+        }
+        transport_.setChannel(channel);
+        if (transport_.send(payload)) {
+            state.channel = channel;
+            return true;
+        }
+    }
+    transport_.setChannel(state.channel);
+    return false;
 }
 
 bool NodeController::sendWithRetry(std::span<const std::uint8_t> payload) {
