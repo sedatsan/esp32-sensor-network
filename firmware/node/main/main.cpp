@@ -22,6 +22,7 @@ constexpr auto kPinPir = static_cast<gpio_num_t>(CONFIG_SN_PIN_PIR);
 constexpr auto kPinTrig = static_cast<gpio_num_t>(CONFIG_SN_PIN_TRIG);
 constexpr auto kPinEcho = static_cast<gpio_num_t>(CONFIG_SN_PIN_ECHO);
 constexpr std::size_t kDistanceSamples = 5;
+constexpr std::uint32_t kRangerPowerUpMs = 100;
 
 // Survives deep sleep; cleared on power loss, which the gateway sees as a
 // ColdBoot report.
@@ -115,6 +116,9 @@ extern "C" void app_main() {
     sn::drivers::Pir pir{pirOut, clock};
     if (cause != sn::app::WakeCause::ColdBoot) {
         pir.skipWarmup();  // the PIR stayed powered while we slept
+    } else {
+        // The HC-SR04 ignores the first trigger right after power-up.
+        vTaskDelay(pdMS_TO_TICKS(kRangerPowerUpMs));
     }
     NodeSensors sensors{pir, ranger};
 
